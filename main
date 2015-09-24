@@ -1,0 +1,80 @@
+#!/usr/bin/env ruby
+
+require "bundler/setup"
+require "time"
+require "logger"
+Bundler.require
+
+STDOUT.sync = true
+LOGGER = Logger.new(STDOUT)
+
+TARGET_SCREEN_NAME = ENV["TARGET"]
+TWITTER_CONFIG = {
+  consumer_key: ENV["CONSUMER_KEY"],
+  consumer_secret: ENV["CONSUMER_SECRET"],
+  access_token: ENV["ACCESS_TOKEN"],
+  access_token_secret: ENV["ACCESS_TOKEN_SECRET"],
+}.freeze
+REST = Twitter::REST::Client.new(TWITTER_CONFIG)
+
+
+def update(text)
+  begin
+    REST.update("[#{Time.now.strftime("%Y-%m-%d %H:%M")}]\n#{text}")
+  rescue => e
+    LOGGER.error(e)
+  end
+end
+
+def check
+  begin
+    user = REST.user(TARGET_SCREEN_NAME)
+    last_status = user.status
+    if (Time.now - last_status.created_at) < 7200
+      if @alive
+        update("#{TARGET_SCREEN_NAME} は生きています")
+      else
+        update("#{TARGET_SCREEN_NAME} が復活しました")
+        @alive = true
+      end
+    else
+      if @alive
+        update("#{TARGET_SCREEN_NAME} が止まりました")
+        @alive = false
+      else
+        update("#{TARGET_SCREEN_NAME} は止まっています")
+      end
+    end
+  rescue Twitter::Error::Forbidden => e
+    LOGGER.info(e)
+    if e.message.include? "suspended"
+      if @alive
+        update("#{TARGET_SCREEN_NAME} が凍結されました")
+        @alive = false
+      else
+        update("#{TARGET_SCREEN_NAME} は凍結されています")
+      end
+    end
+  rescue Twitter::Error::NotFound => e
+    LOGGER.info(e)
+    if @alive
+      update("#{TARGET_SCREEN_NAME} が消えました")
+      @alive = false
+    else
+      update("#{TARGET_SCREEN_NAME} はいません")
+    end
+  rescue => e
+    LOGGER.error(e)
+    update("？？: #{e}")
+  end
+end
+
+unless TWITTER_CONFIG.values.all? && TARGET_SCREEN_NAME
+  LOGGER.error("missing env")
+  exit
+end
+@alive = true
+
+scheduler = Rufus::Scheduler.new
+scheduler.cron("00 * * * * Asia/Tokyo") { check }
+scheduler.join
