@@ -29,7 +29,7 @@ def status
   begin
     user = REST.user(TARGET_SCREEN_NAME)
     last_status = user.status
-    if (Time.now - last_status.created_at) < 7200
+    if (Time.now - last_status.created_at) < (8 * 3600 + 30)
       LOGGER.info("alive")
       :alive
     else
@@ -92,7 +92,6 @@ end
 @status = status
 
 scheduler = Rufus::Scheduler.new
-scheduler.cron("00 1-7,9-15,17-23 * * * Asia/Tokyo") { check(false) }
-scheduler.cron("10,20,30,40,50 * * * * Asia/Tokyo") { check(false) }
-scheduler.cron("00 0,8,16 * * * Asia/Tokyo") { check(true) }
+scheduler.cron("00,10,20,30,40,50 * * * * Asia/Tokyo") { check(false) }
+scheduler.cron("00 00 * * * Asia/Tokyo") { check(true) }
 scheduler.join
