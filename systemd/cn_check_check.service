@@ -7,4 +7,7 @@ User=admin
 WorkingDirectory=/work/cn_check_check
 EnvironmentFile=/work/cn_check_check/env
 Environment=PATH=/home/admin/.gem/ruby/2.2.0/bin:/usr/bin
-ExecStart=/usr/bin/bash -i -c "bundle exec main"
+ExecStart=/usr/bin/bash -i -c "bundle exec ./main"
+
+[Install]
+WantedBy=multi-user.target
