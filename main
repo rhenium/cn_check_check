@@ -17,7 +17,6 @@ TWITTER_CONFIG = {
 }.freeze
 REST = Twitter::REST::Client.new(TWITTER_CONFIG)
 
-
 def update(text)
   begin
     REST.update("[#{Time.now.strftime("%Y-%m-%d %H:%M")}]\n#{text}")
@@ -26,55 +25,74 @@ def update(text)
   end
 end
 
-def check
+def status
   begin
     user = REST.user(TARGET_SCREEN_NAME)
     last_status = user.status
     if (Time.now - last_status.created_at) < 7200
-      if @alive
-        update("#{TARGET_SCREEN_NAME} は生きています")
-      else
-        update("#{TARGET_SCREEN_NAME} が復活しました")
-        @alive = true
-      end
+      LOGGER.info("alive")
+      :alive
     else
-      if @alive
-        update("#{TARGET_SCREEN_NAME} が止まりました")
-        @alive = false
-      else
+      LOGGER.info("stopped")
+      :stopped
+    end
+  rescue Twitter::Error::Forbidden => e
+    if e.message.include? "suspended"
+      LOGGER.info("suspended")
+      :suspended
+    else
+      LOGGER.error(e)
+      e
+    end
+  rescue Twitter::Error::NotFound => e
+    LOGGER.info("deleted")
+    :deleted
+  rescue => e
+    LOGGER.error(e)
+    e
+  end
+end
+
+def check(force = false)
+  new_status = status
+  if new_status.is_a?(Symbol) && new_status == @status
+    if force
+      case new_status
+      when :alive
+        update("#{TARGET_SCREEN_NAME} は生きています")
+      when :suspended
+        update("#{TARGET_SCREEN_NAME} は凍結されています")
+      when :deleted
+        update("#{TARGET_SCREEN_NAME} はいません")
+      when :stopped
         update("#{TARGET_SCREEN_NAME} は止まっています")
       end
     end
-  rescue Twitter::Error::Forbidden => e
-    LOGGER.info(e)
-    if e.message.include? "suspended"
-      if @alive
-        update("#{TARGET_SCREEN_NAME} が凍結されました")
-        @alive = false
-      else
-        update("#{TARGET_SCREEN_NAME} は凍結されています")
-      end
-    end
-  rescue Twitter::Error::NotFound => e
-    LOGGER.info(e)
-    if @alive
+  else
+    case new_status
+    when :alive
+      update("#{TARGET_SCREEN_NAME} が復活しました")
+    when :suspended
+      update("#{TARGET_SCREEN_NAME} が凍結されました")
+    when :deleted
       update("#{TARGET_SCREEN_NAME} が消えました")
-      @alive = false
+    when :stopped
+      update("#{TARGET_SCREEN_NAME} が止まりました")
     else
-      update("#{TARGET_SCREEN_NAME} はいません")
+      update("？？: #{e}")
     end
-  rescue => e
-    LOGGER.error(e)
-    update("？？: #{e}")
   end
+  @status = new_status
 end
 
 unless TWITTER_CONFIG.values.all? && TARGET_SCREEN_NAME
   LOGGER.error("missing env")
   exit
 end
-@alive = true
+@status = status
 
 scheduler = Rufus::Scheduler.new
-scheduler.cron("00 * * * * Asia/Tokyo") { check }
+scheduler.cron("00 1-7,9-15,17-23 * * * Asia/Tokyo") { check(false) }
+scheduler.cron("10,20,30,40,50 * * * * Asia/Tokyo") { check(false) }
+scheduler.cron("00 0,8,16 * * * Asia/Tokyo") { check(true) }
 scheduler.join
