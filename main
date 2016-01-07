@@ -19,7 +19,7 @@ REST = Twitter::REST::Client.new(TWITTER_CONFIG)
 
 def update(text)
   begin
-    REST.update("[#{Time.now.strftime("%Y-%m-%d %H:%M")}]\n#{text}")
+    REST.update("[#{Time.now.localtime("+09:00").strftime("%Y-%m-%d %H:%M")}]\n#{text}")
   rescue => e
     LOGGER.error(e)
   end
